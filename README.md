@@ -53,9 +53,6 @@ This GitHub repository showcases hands-on work in functional verification using 
 
 ---
 
-## 📸 Screenshots & Demo
-
-> 📷 Screenshots and waveform dumps for each module are available in individual project folders.
 
 ---
 
@@ -63,8 +60,8 @@ This GitHub repository showcases hands-on work in functional verification using 
 
 If you're a recruiter, engineer, or enthusiast—I'd love to connect!
 
-- 🌐 [LinkedIn](https://linkedin.com/in/yourprofile)
-- ✉️ yourname@example.com
+- 🌐 [LinkedIn](https://linkedin.com/in/u-r-sachin)
+- ✉️ sachinur17@gmail.com
 
 ---
 
