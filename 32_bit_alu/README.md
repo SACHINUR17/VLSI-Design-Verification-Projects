@@ -62,7 +62,8 @@ This project implements a 32-bit Arithmetic Logic Unit (ALU) using Verilog and v
 ---
 
 ## 📸 Sample Output / Waveform
-*Add screenshots here from your simulation or output logs demonstrating correct functionality.*
+![photo_2025-04-18_21-07-20](https://github.com/user-attachments/assets/5281268f-836d-4d34-9dcd-2cb34dd2b4ff)
+
 
 ---
 
@@ -72,11 +73,11 @@ This project implements a 32-bit Arithmetic Logic Unit (ALU) using Verilog and v
 ---
 
 ## 👨‍💻 Author
-**Sachin**  
+**U R Sachin**  
 Electronics & Communication Engineer  
-VLSI | UVM | Digital Design  
+VLSI | UVM | Digital Design Verification Engineer  
 
-[LinkedIn](https://linkedin.com) | [GitHub](https://github.com) *(Add your actual links)*
+[LinkedIn](https://linkedin.com/u-r-sachin) | [GitHub](https://github.com/SACHINUR17) 
 
 ---
 
