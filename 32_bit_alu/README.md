@@ -3,6 +3,9 @@
 
 ## 📌 Project Overview
 This project implements a 32-bit Arithmetic Logic Unit (ALU) using Verilog and verifies it using Universal Verification Methodology (UVM). The ALU supports 8 arithmetic and logical operations, and the verification environment achieves 100% functional coverage using a modular UVM testbench.
+![capture1](https://github.com/user-attachments/assets/2647de5e-b424-4296-bb4c-71620ac847f2)
+![capture11](https://github.com/user-attachments/assets/2f6c82fa-e0b8-4c72-bcfd-98b5b49f9d96)
+![IMG_20250418_211459](https://github.com/user-attachments/assets/f676b002-7022-466a-ad80-8ece21da554f)
 
 ---
 
@@ -62,7 +65,8 @@ This project implements a 32-bit Arithmetic Logic Unit (ALU) using Verilog and v
 ---
 
 ## 📸 Sample Output / Waveform
-![photo_2025-04-18_21-07-20](https://github.com/user-attachments/assets/5281268f-836d-4d34-9dcd-2cb34dd2b4ff)
+![IMG_20250418_211311](https://github.com/user-attachments/assets/912f7af2-7ad4-4172-ba9c-3c7c716b95af)
+
 
 
 ---
