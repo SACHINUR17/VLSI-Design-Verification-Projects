@@ -1,1 +1,0 @@
-// UVM scoreboard class
