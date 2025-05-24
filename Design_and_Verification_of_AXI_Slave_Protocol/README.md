@@ -1,4 +1,5 @@
 *AXI (Advanced eXtensible Interface) protocol*
+
 AXI is a high-performance, high-bandwidth protocol designed for connecting high-performance IP components, such as processors and memory controllers. It is designed to support the needs of high-frequency, high-throughput systems while providing features to ensure data integrity and minimize latency. AXI has several versions, including AXI4 and AXI4-Lite, each with specific characteristics. AXI features include:
 
 Separate read and write channels to allow concurrent data transfers.
