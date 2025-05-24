@@ -23,7 +23,7 @@ This GitHub repository showcases hands-on work in functional verification using 
 │   ├── sv/
 │   └── README.md
 │
-├── AXI_Lite_Slave_UVM/          # AXI-Lite Slave with UVM-based Testbench
+├── Design_and_Verification_of_AXI_Slave_Protocol/          # AXI-Slave Protocol with FSM-based Testbench
 │   ├── rtl/
 │   ├── tb/
 │   └── README.md
@@ -58,7 +58,7 @@ This GitHub repository showcases hands-on work in functional verification using 
 
 ## 🤝 Let's Connect
 
-If you're a recruiter, engineer, or enthusiast—I'd love to connect!
+If you're a recruiter, engineer, or enthusiast, I'd love to connect!
 
 - 🌐 [LinkedIn](https://linkedin.com/in/u-r-sachin)
 - ✉️ sachinur17@gmail.com
