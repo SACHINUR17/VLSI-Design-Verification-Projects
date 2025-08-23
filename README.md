@@ -19,8 +19,9 @@ This GitHub repository showcases hands-on work in functional verification using 
 │   ├── tb/
 │   └── README.md
 │
-├── APB_Protocol_Checker/        # APB Protocol Checker (Assertion-based)
-│   ├── sv/
+├── AHB_Protocol_Checker/        # AHB Protocol
+│   ├── Design/
+|   ├── Testbench/
 │   └── README.md
 │
 ├── Design_and_Verification_of_AXI_Slave_Protocol/          # AXI-Slave Protocol with FSM-based Testbench
@@ -46,7 +47,7 @@ This GitHub repository showcases hands-on work in functional verification using 
 
 ## 🧰 Tools Used
 
-- **QuestaSim / ModelSim** – Simulation
+- **QuestaSim / ModelSim / Synopsis VCS / Cadence Xcelium** – Simulation
 - **SystemVerilog** – Design & Verification Language
 - **UVM (Universal Verification Methodology)** – Verification Framework
 - **Git/GitHub** – Version Control & Collaboration
