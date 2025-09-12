@@ -14,9 +14,9 @@ This GitHub repository showcases hands-on work in functional verification using 
 │   ├── tb/
 │   └── README.md
 │
-├── FIFO_Verification/           # Synchronous FIFO Verification
-│   ├── rtl/
-│   ├── tb/
+├── AXI4_Protocol_Verification/           # AXI4 Protocol Verification
+│   ├── Design/
+│   ├── Testbench Components/
 │   └── README.md
 │
 ├── AHB_Protocol_Checker/        # AHB Protocol
@@ -24,7 +24,7 @@ This GitHub repository showcases hands-on work in functional verification using 
 |   ├── Testbench/
 │   └── README.md
 │
-├── Design_and_Verification_of_AXI_Slave_Protocol/          # AXI-Slave Protocol with FSM-based Testbench
+├── Design_and_Verification_of_AXI4-lite_Slave_Protocol/          # AXI4-lite Slave Protocol with Verilog and FSM-based Testbench
 │   ├── rtl/
 │   ├── tb/
 │   └── README.md
