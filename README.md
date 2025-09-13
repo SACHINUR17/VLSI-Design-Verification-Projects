@@ -1,7 +1,7 @@
-# 🔍 VLSI Design Verification Engineer Projects
+# 🔍 VLSI Design Verification Projects
 
 Welcome to my collection of **VLSI Design Verification** projects.  
-This GitHub repository showcases hands-on work in functional verification using **SystemVerilog**, **UVM**, and industry-standard EDA tools.
+This GitHub repository showcases hands-on work in functional verification using **Verilog**, **SystemVerilog**, **UVM**, **Protocols**, and industry-standard EDA tools.
 
 ---
 
@@ -9,7 +9,7 @@ This GitHub repository showcases hands-on work in functional verification using 
 
 ```bash
 .
-├── ALU_32bit_UVM/               # 32-bit ALU Design + UVM Verification
+├── ALU_32bit_UVM/               # 32-bit ALU Design using Verilog + UVM Verification
 │   ├── rtl/
 │   ├── tb/
 │   └── README.md
@@ -25,7 +25,7 @@ This GitHub repository showcases hands-on work in functional verification using 
 │   └── README.md
 │
 ├── Design_and_Verification_of_AXI4-lite_Slave_Protocol/          # AXI4-lite Slave Protocol with Verilog and FSM-based Testbench
-│   ├── rtl/
+│   ├── Design/
 │   ├── tb/
 │   └── README.md
 ```
