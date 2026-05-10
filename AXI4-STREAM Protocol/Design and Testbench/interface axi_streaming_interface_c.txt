@@ -1,0 +1,8 @@
+interface axi_streaming_interface_c#(parameter DATA_WIDTH = 64) (input bit aclk, input bit rst);
+
+  logic tvalid ;
+  logic tready ;
+  logic [(DATA_WIDTH - 1):0] tdata ;
+  logic [7:0] tid;
+
+endinterface

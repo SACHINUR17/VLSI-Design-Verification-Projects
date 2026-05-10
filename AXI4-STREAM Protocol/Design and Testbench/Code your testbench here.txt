@@ -1,0 +1,37 @@
+// Code your testbench here
+// or browse Examples
+`timescale 1ns/1ps
+
+import uvm_pkg::*;
+`include "axi_streaming_pkg.sv"
+import axi_streaming_pkg_p::*;
+`include "axi_streaming_interface.sv"
+  `include "axi_streaming_driver.sv"
+typedef class axi_streaming_driver_c;
+
+module axi_streaming_top_m;
+
+bit clk;
+bit rst = 0;
+always #10 clk =~ clk;
+
+initial begin
+  #12 rst = 1;
+  #18 rst = 0;
+end
+
+initial begin
+  run_test("my_test");
+end
+
+axi_streaming_interface_c intf(clk,rst);
+
+initial begin
+  uvm_config_db#(virtual axi_streaming_interface_c)::set(uvm_root::get(),"*","intf",intf);
+  $display("AXI_TOP_MODULE_DISPLAY");
+  $dumpfile("axi_top.vcd");
+  $dumpvars(0);
+  #10000 $finish;
+end
+
+endmodule
