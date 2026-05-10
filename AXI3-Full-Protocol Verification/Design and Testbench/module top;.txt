@@ -1,0 +1,21 @@
+module top;
+  bit clk,RESET;
+  string args;
+  always  #5 clk=~clk;
+  axi_intf#(`WIDTH,`SIZE) intf (clk,RESET);
+
+  initial begin  
+    clk=0;
+        RESET = 1 ;
+    #15 RESET = 1 ;
+  end 
+  
+  initial 
+    begin
+     $dumpfile("dump.vcd");
+     $dumpvars;
+     uvm_config_db#(virtual axi_intf#(`WIDTH,`SIZE))::set(uvm_root::get(),"*","intf",intf);
+     run_test("axi_Test");
+  end
+  
+endmodule
