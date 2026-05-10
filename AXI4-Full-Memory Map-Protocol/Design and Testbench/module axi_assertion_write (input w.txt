@@ -1,0 +1,58 @@
+module axi_assertion_write (input wire
+                            clk , 
+           					reset_n,
+          				 	awid,
+           					awaddr,
+           					awlen,
+           					awburst,
+           					awsize,
+           					awvalid,
+           					awready,
+           					wready,
+           					wvalid,
+                            wdata,
+                            wlast
+   							);
+  
+  property p1;
+    @(posedge clk) ($rose(awvalid)   ) |-> ##[0:10] ($fell(awvalid) and $fell(awready) );
+  endproperty
+  property p2;
+     @(posedge clk) (awvalid && awready |-> $stable(awaddr));
+  endproperty
+ 
+  property p4;
+    @(posedge clk) ($rose(wvalid)  ) |-> ##[1:10] ($fell(wvalid) and $fell(wready) );
+  endproperty
+  //property p5;
+    //@(posedge clk) (wvalid && wready |=> ##4 wlast);
+  //endproperty
+
+
+awvalid_awready1: assert property(p1)
+  $display("WRITE Assertion p1 Passed ",$time);
+              else begin
+                $error("WRITE  Assertion p1 Failed", $time);
+              end
+  awvalid_awready2: assert property(p2)
+    $display("WRITE Assertion p2 Passed",$time);
+              else begin
+                $error(" WRITE  Assertion p2 Failed", $time);
+              end
+ //   awvalid_awready3: assert property(p3)
+   //   $display("WRITE Assertion p3 Passed",$time);
+     //         else begin
+       //         $error(" WRITE Assertion p3 Failed", $time);
+         //     end
+      awvalid_awready4: assert property(p4)
+        $display("WRITE Assertion p4 Passed",$time);
+              else begin
+                $error(" WRITE Assertion p4 Failed", $time);
+              end
+       // awvalid_awready5: assert property(p5)
+        // $display("WRITE Assertion p5 Passed",$time);
+           //   else begin
+        // $error(" WRITE Assertion p5 Failed", $time);
+              //end
+endmodule : axi_assertion_write
+  

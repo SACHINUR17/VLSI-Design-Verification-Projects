@@ -1,0 +1,61 @@
+module axi_assertion_read (input wire
+                            clk , 
+           					reset_n,
+          				 	arid,
+           					araddr,
+           					arlen,
+           					arburst,
+           					arsize,
+           					arvalid,
+           					arready,
+           					rready,
+           					rvalid,
+                            rdata,
+                            rlast
+   							);
+  
+  property p1;
+    @(posedge clk) ($rose(arvalid) or $rose(arready) ) |-> ##[1:$] ($fell(arvalid) and $fell(arready) );
+  endproperty
+  property p2;
+    @(posedge clk) (arvalid && arready |-> $stable(araddr));
+    //@(posedge clk) (arvalid && arready |-> $stable(arid));
+  endproperty
+  property p3;
+    @(posedge clk) (rvalid && rready |=> ##1 rdata);
+  endproperty
+  property p4;
+    @(posedge clk) ($rose(rvalid) or $rose(rready) ) |-> ##[1:$] ($fell(rvalid) and $fell(rready) );
+  endproperty
+  //property p5;
+    //@(posedge clk) (rvalid && rready |=> ##2 rlast);
+  //endproperty
+
+
+arvalid_arready1: assert property(p1)
+  $display("READ Assertion p1 Passed ",$time);
+              else begin
+                $error(" READ Assertion p1 Failed", $time);
+              end
+  arvalid_arready2: assert property(p2)
+    $display("READ Assertion p2 Passed",$time);
+              else begin
+                $error(" READ Assertion p2 Failed", $time);
+              end
+    arvalid_arready3: assert property(p3)
+      $display("READ Assertion p3 Passed",$time);
+              else begin
+                $error(" READ Assertion p3 Failed", $time);
+              end
+      arvalid_arready4: assert property(p4)
+        $display("READ Assertion p4 Passed",$time);
+              else begin
+                $error(" READ Assertion p4 Failed", $time);
+              end
+      //  arvalid_arready5: assert property(p5)
+        // $display("READ Assertion p5 Passed",$time);
+          //    else begin
+         //$error(" READ Assertion p5 Failed", $time);
+             // end
+endmodule : axi_assertion_read
+  

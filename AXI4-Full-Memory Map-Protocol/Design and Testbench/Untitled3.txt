@@ -1,0 +1,133 @@
+
+class w_driver extends uvm_driver #(w_seq_item , w_seq_item);
+
+  `uvm_component_utils (w_driver)
+   virtual axi_intf.W_DRV_MOD w_drv_if;
+
+  w_seq_item   command_queue[$]; //addr,data,awlen
+   w_seq_item   data_queue[$];
+
+   w_seq_item   command_w_clone,command_w_txn;
+   w_seq_item   data_w_clone,data_w_txn;
+
+   semaphore s1 = new(1);
+   semaphore s2 = new(1);
+   semaphore s3 = new(1);
+
+   int min_resp_delay;
+   int max_resp_delay;
+
+   function new (string name = "w_driver" , uvm_component parent);
+      super.new (name,parent);
+   endfunction
+
+   extern function void build_phase  (uvm_phase phase); 
+   extern task run_phase             (uvm_phase phase);
+   extern task w_command_task ();
+   extern task w_data_task ();
+   extern task w_response_task ();
+
+endclass : w_driver
+
+   function void w_driver :: build_phase (uvm_phase phase);
+      super.build_phase (phase);
+     `uvm_info ("w_driver" , "build_phase" , UVM_MEDIUM) 
+      command_w_txn = w_seq_item :: type_id :: create ("command_w_txn");
+      data_w_txn    = w_seq_item :: type_id :: create ("data_w_txn");
+   endfunction : build_phase
+
+   task w_driver :: run_phase (uvm_phase phase);
+     `uvm_info ("w_driver" , "run_phase" , UVM_MEDIUM)
+      forever begin
+        wait (w_drv_if.reset_n == 1'b1);
+        seq_item_port.get_next_item (req);
+       // $display("RUN PHASE: time %t", $time);
+        $cast(command_w_clone , req.clone());
+        command_queue.push_back (command_w_clone); // this should have command and data and awlen
+        $cast(data_w_clone , req.clone());
+        data_queue.push_back (command_w_clone);
+        seq_item_port.item_done (rsp);
+        //$display("RUN PHASE: starting the tasks time %t", $time);
+        fork
+          w_command_task();
+          w_data_task();
+          w_response_task();
+        //join_none
+        join
+        //$display("RUN PHASE: Ending tasks time %t", $time);
+        @(w_drv_if.w_drv_cb);
+        //$display("RUN PHASE: Taks end: CB time %t", $time);
+      end
+   endtask : run_phase      
+     
+
+   task w_driver :: w_command_task ();
+     s1.get(1);
+     command_w_txn = command_queue.pop_front();
+     //$display("W_DRIVER TASK: time %t", $time);
+     //$display("W_DRIVER TASK: POP DATA: addr: %d  awlen: %d time %t",command_w_txn.awaddr, command_w_txn.awlen, $time);
+     //$display("W_DRIVER TASK: awlen : %d time %t", command_w_txn.awlen, $time);
+     //repeat(command_w_txn.awlen)
+     repeat(1)
+     begin  
+       //$display("W_DRIVER TASK: addr: %d awlen: %d time %t", command_w_txn.awaddr, command_w_txn.awlen, $time);
+       w_drv_if.w_drv_cb.awvalid  <= 1'b1;
+       w_drv_if.w_drv_cb.awid     <= command_w_txn.awid; 
+       w_drv_if.w_drv_cb.awaddr   <= command_w_txn.awaddr;
+       w_drv_if.w_drv_cb.awlen    <= command_w_txn.awlen;
+       w_drv_if.w_drv_cb.awsize   <= command_w_txn.awsize;
+       w_drv_if.w_drv_cb.awburst  <= command_w_txn.awburst;      
+       wait (w_drv_if.w_drv_cb.awready);
+       w_drv_if.w_drv_cb.awvalid  <= 1'b0;
+       repeat(command_w_txn.cmd2cmd_delay) begin
+         //$display("W_DRIVER TASK: Repeat CB: time %t", $time);
+       @(w_drv_if.w_drv_cb);
+         //$display("W_DRIVER TASK:CB ENDS time %t", $time);
+       end
+     end
+     s1.put(1);
+   endtask : w_command_task
+
+   task w_driver :: w_data_task ();
+     s2.get(1);
+     //$display("W_DATA_TASK: time %t", $time); 
+     data_w_txn = data_queue.pop_front();
+     //$display("W_DATA_TASK: POP DATA:  addr: %d  awlen: %d time %t", data_w_txn.awaddr, data_w_txn.awlen,  $time); 
+     repeat(data_w_txn.cmd2data_delay+5) @(w_drv_if.w_drv_cb);
+             
+     for(int i=0; i<=data_w_txn.awlen; i++) begin
+       //repeat(data_w_txn.data2data_delay) 
+       @(w_drv_if.w_drv_cb);
+       //$display("W_DATA_TASK: Driving data awlen: %d, time %t", i ,$time); 
+       w_drv_if.w_drv_cb.wvalid    <= 1'b1;
+       w_drv_if.w_drv_cb.wdata     <= data_w_txn.wdata[i];
+       w_drv_if.w_drv_cb.wstrb     <= data_w_txn.wstrb[i];
+       // w_drv_if.w_drv_cb.wlast     <= 1'b0;
+       //$display("W_DATA_TASK: awlen: %d, time %t", data_w_txn.awlen, $time); 
+       if(data_w_txn.awlen==i)begin
+         w_drv_if.w_drv_cb.wlast  <= 1'b1;
+       end else begin
+         w_drv_if.w_drv_cb.wlast     <= 1'b0;
+       end
+       //$display("W_DATA_TASK: time %t", $time); 
+     end
+     
+     @(w_drv_if.w_drv_cb);
+     w_drv_if.w_drv_cb.wvalid    <= 1'b0;
+     w_drv_if.w_drv_cb.wlast     <= 1'b0;
+     wait (w_drv_if.w_drv_cb.wready == 1'b0);
+     //@(w_drv_if.w_drv_cb);
+     
+      s2.put(1); 
+   endtask : w_data_task
+
+   task w_driver :: w_response_task ();
+      //std :: randomize() with { min_resp_delay inside {[0:3]}; max_resp_delay inside {[0:3]}; };
+      //repeat(min_resp_delay)@(w_drv_if.w_drv_cb);
+      s3.get(1); 
+      w_drv_if.w_drv_cb.bready  <= 1'b1; 
+      wait (w_drv_if.w_drv_cb.bvalid == 1'b1);
+      w_drv_if.w_drv_cb.bready  <= 1'b0; 
+      @(w_drv_if.w_drv_cb);
+      s3.put(1); 
+   endtask : w_response_task

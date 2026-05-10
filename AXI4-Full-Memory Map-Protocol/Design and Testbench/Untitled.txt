@@ -1,0 +1,651 @@
+
+class axi_read_transaction;
+
+  `include "design.sv"
+
+   //interface signals
+   logic [(ID_WIDTH  - 1) : 0]     arid;
+   logic [(ADDR_WIDTH - 1) : 0]    araddr;
+   logic [(LEN_WIDTH - 1) : 0]     arlen;
+   logic [(2 - 1) : 0]             arburst;
+   logic [(SIZE_WIDTH - 1) : 0]    arsize;
+   logic                           arvalid;
+   logic                           arready;
+
+   logic [(ID_WIDTH - 1) : 0]      rid;
+   logic [1:0]                     rresp;
+   logic [(DATA_WIDTH - 1) : 0]    rdata;
+   logic [(DATA_WIDTH/8) - 1 : 0]  rstrobe;
+   logic                           rlast;
+   logic                           rvalid;
+   logic                           rready;
+
+   //control knobs
+   rand int                        req_delay;
+   rand int                        rsp_delay;
+   static int                      min_rsp_delay;
+   static int                      min_req_delay;
+   static int                      max_rsp_delay;
+   static int                      max_req_delay;
+   static bit                      interleaving_en;
+   static bit                      out_of_order_en;
+   static bit [(2**ID_WIDTH)-1:0]  cmd_tag_queue_size;
+  
+    //CONSTRAINTS
+    constraint req_delay_c {req_delay inside {[min_req_delay:max_req_delay]};} 
+    constraint rsp_delay_c {rsp_delay inside {[min_rsp_delay:max_rsp_delay]};} 
+    
+
+
+endclass : axi_read_transaction
+
+
+module axi_slave_read (
+   //CLK & RST
+   input                           clk , 
+   input                           reset_n,
+   //READ COMMAND BUS
+   input [(ID_WIDTH  - 1) : 0]     arid,
+   input [(ADDR_WIDTH - 1) : 0]    araddr,
+   input [(LEN_WIDTH - 1) : 0]     arlen,
+   input [(2 - 1) : 0]             arburst,
+   input [(SIZE_WIDTH - 1) : 0]    arsize,
+   input                           arvalid,
+   output  logic                   arready,
+   //READ RESPONSE BUS
+   output logic [(ID_WIDTH - 1) : 0]   rid,
+   output logic [1:0]                  rresp,
+   output logic [(DATA_WIDTH - 1) : 0] rdata,
+   output logic [(DATA_WIDTH/8) - 1 : 0]  rstrobe,
+   output logic                           rlast,
+   output logic                           rvalid,
+   input                                  rready,
+   //Control signals
+   input [31:0]                           min_rsp_delay,
+   input [31:0]                           min_req_delay,
+   input [31:0]                           max_rsp_delay,
+   input [31:0]                           max_req_delay,
+   input [31:0]                           num_slave,
+   input                                  interleaving_en,
+   input                                  out_of_order_en
+);
+   
+   import  uvm_pkg :: *;
+  `include "uvm_macros.svh"
+   bit current_rsp_id_freeze;
+   int request_q[$];
+   axi_read_transaction                req , rsp;
+   axi_read_transaction                cmd_order_queue[$];
+   axi_read_transaction                addr_data_queue[$];
+   axi_read_transaction                tag_based_cmd_queue[2**ID_WIDTH][$];
+   bit [DATA_WIDTH - 1 :0]             data_queue[2**ID_WIDTH] [$];
+   bit                                 error_rsp_scenario;                                
+  bit[3:0]           offset=0;
+
+   initial begin
+      fork
+         read_request();
+         read_data ();
+      join
+   end
+
+  always @(min_rsp_delay , min_req_delay , max_rsp_delay , max_req_delay) begin
+     req.min_req_delay = min_req_delay;
+     req.max_req_delay = max_req_delay;
+     req.min_rsp_delay = min_rsp_delay;
+     req.max_rsp_delay = max_rsp_delay;
+  end
+
+
+
+   task read_request ();
+      arready  = 0;
+      forever begin
+         req = new();
+         @(posedge clk); 
+         arready  = 0;
+         wait (arvalid == 1) begin
+           #1 wait (arvalid == 1);
+            @(posedge clk);
+         end
+         assert (req.randomize()); 
+         repeat (req.req_delay) begin
+            @(posedge clk);
+         end
+         while (tag_based_cmd_queue[arid].size() > 0) begin
+            @(posedge clk); 
+         end
+         arready      = 1;
+         req.arid     = arid;
+         req.araddr   = araddr ;
+         req.arlen    = arlen ;
+         req.arburst  = arburst ;
+         req.arsize   = arsize ;
+
+         #1; 
+         if (arvalid == 1) begin
+            fork
+            automatic axi_read_transaction txn = req;
+               begin
+                  @(posedge clk);
+                  cmd_order_queue.push_back (txn);
+                 addr_data_queue.push_back(txn);
+                 //$display("PUSH Transaction: %t  ,  packet %p", $time, txn);
+                  tag_based_cmd_queue[txn.arid].push_back(txn);
+                  populate_data_queue (txn); 
+               end
+            join_none
+         end
+      end
+   endtask : read_request
+
+   task populate_data_queue (axi_read_transaction txn);
+      bit [1+(DATA_WIDTH/8)+DATA_WIDTH :0] data;
+      int incr_addr;
+      bit [(DATA_WIDTH/8) - 1:0] strobe;   
+
+      std :: randomize (error_rsp_scenario) with {error_rsp_scenario dist {0 := 99 , 1 := 10};};   
+      if (error_rsp_scenario == 1) begin
+          txn.arlen =  txn.arlen + 1;
+      end
+      for (int i = 0 ; i <= txn.arlen ; i ++) begin
+         assert (std :: randomize (data));
+         if (txn.arsize != 7) begin
+            strobe =  {(DATA_WIDTH/8){1'b1}} >> ((2**txn.arsize)-1); 
+            data [(DATA_WIDTH/8)+ (DATA_WIDTH -1): DATA_WIDTH]  = data [(DATA_WIDTH/8) + (DATA_WIDTH -1): DATA_WIDTH] & strobe;
+         end
+         if (txn.arburst == 1) begin
+            incr_addr = incr_addr + (2**(txn.arsize+1));
+         end 
+         std :: randomize (error_rsp_scenario) with {error_rsp_scenario dist {0 := 90 , 1 := 10};};   
+         if (txn.araddr[(32 - 1) : 12] > (num_slave-1)) begin
+            data[2+(DATA_WIDTH/8)+(DATA_WIDTH -1) : 1+(DATA_WIDTH/8)+(DATA_WIDTH -1)] = 2;
+         end else if ((incr_addr [31:12] != txn.araddr[(32 - 1) : 12]) && (txn.arburst == 1)) begin
+            data[2+(DATA_WIDTH/8)+(DATA_WIDTH -1) : 1+(DATA_WIDTH/8)+(DATA_WIDTH -1)] = 3;
+         end else begin
+            data[2+(DATA_WIDTH/8)+(DATA_WIDTH -1) : 1+(DATA_WIDTH/8)+(DATA_WIDTH -1)] = 0;
+         end
+         if (error_rsp_scenario == 1) begin
+            data[2+(DATA_WIDTH/8)+(DATA_WIDTH -1) : 1+(DATA_WIDTH/8)+(DATA_WIDTH -1)] = $random;
+         end
+         data_queue[txn.arid].push_back(data);
+      end
+         
+   endtask : populate_data_queue
+
+
+
+   task read_data;
+
+       rvalid     = 0;
+       rlast      = 0;
+      forever begin
+         choose_data_and_drive();
+      end
+   endtask : read_data
+
+
+
+   task  choose_data_and_drive ();
+     bit data_exist;
+     bit rlast_t;
+     bit [2+(DATA_WIDTH/8)+(DATA_WIDTH -1):0] data_to_send;
+     logic [(ID_WIDTH - 1) : 0]      current_rsp_id;
+    // $display("RD:Wait for rvalid:4 : %d : %t",data_fifo[araddr],$time);
+     
+     axi_read_transaction   packet;
+    
+   //  $display("RD:Wait for rvalid:6 : %h", data_fifo[araddr]);
+     @(posedge clk);
+     //$display("RD:Wait for rvalid:7 : %h", data_fifo[araddr]);
+     while (cmd_order_queue.size == 0) begin
+        @(posedge clk);
+     end
+     rsp = new();
+     packet = new();
+     assert (rsp.randomize());
+     request_q.delete(); 
+     foreach  (cmd_order_queue[i]) begin 
+        request_q.push_back (cmd_order_queue[i].arid);
+     end
+     `uvm_info ("slave_read" , $psprintf ("CHOOSE READ_DATA : request_q = %p",request_q) , UVM_DEBUG)
+     if ((interleaving_en == 0) && (current_rsp_id_freeze == 0)) begin
+        current_rsp_id_freeze = 1; 
+        if (out_of_order_en == 1) begin
+           request_q.shuffle();
+           current_rsp_id = request_q.pop_front ();
+        end else begin
+           current_rsp_id = request_q.pop_front ();
+        end
+     end else if (interleaving_en == 1) begin
+        request_q.shuffle();
+        current_rsp_id = request_q.pop_front ();
+     end
+  // else begin
+  //     current_rsp_id = request_q.pop_front ();
+  //  end 
+     `uvm_info ("slave_read" , $psprintf ("CHOOSE READ_DATA : current_rsp_id  = %h", current_rsp_id ) , UVM_DEBUG)
+     `uvm_info ("slave_read" , $psprintf ("CHOOSE READ_DATA : Data_q  = %p", data_queue ) , UVM_DEBUG)
+     `uvm_info ("slave_read" , $psprintf ("CHOOSE READ_DATA : cmd_order_queue   = %p", cmd_order_queue ) , UVM_DEBUG)
+     `uvm_info ("slave_read" , $psprintf ("CHOOSE READ_DATA : tag_based_cmd_queue    = %p", tag_based_cmd_queue) , UVM_DEBUG)
+     
+     data_to_send = data_queue[current_rsp_id].pop_front ();
+     rlast_t = 0;
+     if (data_queue[current_rsp_id].size() == 0) begin
+        if ((interleaving_en == 0) && (current_rsp_id_freeze == 1)) begin
+            current_rsp_id_freeze = 0;
+        end 
+        rlast_t = 1;
+        foreach (cmd_order_queue[i]) begin
+           if (cmd_order_queue[i].arid == current_rsp_id) begin
+              cmd_order_queue.delete(i);
+           end
+        end
+        void'(tag_based_cmd_queue[current_rsp_id].pop_front()); 
+     end 
+     //$display("Asserting rvalid Time : %t",$time);
+     
+     //rresp      = data_to_send [1+(DATA_WIDTH/8)+DATA_WIDTH:(DATA_WIDTH/8)+DATA_WIDTH];
+     packet = addr_data_queue.pop_front ();
+    // $display("DRIVE_DATA: POP READ CMD:1 packet %p ",packet);
+     if(packet != null) 
+     begin
+      // $display("DRIVE_DATA: packet address %d, time: %t ",packet.araddr, $time);
+       if(data_fifo.exists(packet.araddr)) 
+       begin
+         //$display(" packet arlen %d  :%t ",packet.arlen,$time);
+         //$display("2 packet %p ",packet);
+         offset = 0;
+         repeat(packet.arlen+1)
+         begin
+           @(posedge clk);
+           rvalid = 1;
+           rid        = current_rsp_id;
+           rdata      = data_to_send [DATA_WIDTH - 1 :0];
+           rstrobe    = data_to_send [(DATA_WIDTH/8)+(DATA_WIDTH - 1):DATA_WIDTH];
+           rresp      = data_to_send [1+(DATA_WIDTH/8)+DATA_WIDTH:(DATA_WIDTH/8)+DATA_WIDTH];
+           rdata=data_fifo[packet.araddr+offset];
+           offset=offset+1;
+           //$display("offset %d",offset);
+           //$display("packet_araddr : %d : data %h : time %t",packet.araddr,rdata,$time);
+         end
+         rlast=1;
+         @(posedge clk);
+         rvalid = 0;
+         rlast=0;
+       end
+       else 
+       begin
+         //$display("No data found in this adress");
+         rdata = 'hABCD_ABCD_ABCD_ABCD;
+       end
+     end           
+     else
+     begin
+       rdata = 'hABCD_0000_ABCD_0000;
+     end
+     //rlast      = 0;
+     while (rready == 0) 
+     begin
+       @(posedge clk);
+     end
+     @(posedge clk);
+     //$display("Deasserting rvalid %t",$time);
+     rvalid     = 0;
+     rlast      = 0;
+   
+   endtask : choose_data_and_drive
+
+
+endmodule : axi_slave_read 
+
+
+
+/*
+
+class axi_read_transaction;
+
+  `include "design.sv"
+
+   //interface signals
+   logic [(ID_WIDTH  - 1) : 0]     arid;
+   logic [(ADDR_WIDTH - 1) : 0]    araddr;
+   logic [(LEN_WIDTH - 1) : 0]     arlen;
+   logic [(2 - 1) : 0]             arburst;
+   logic [(SIZE_WIDTH - 1) : 0]    arsize;
+   logic                           arvalid;
+   logic                           arready;
+
+   logic [(ID_WIDTH - 1) : 0]      rid;
+   logic [1:0]                     rresp;
+   logic [(DATA_WIDTH - 1) : 0]    rdata;
+   logic [(DATA_WIDTH/8) - 1 : 0]  rstrobe;
+   logic                           rlast;
+   logic                           rvalid;
+   logic                           rready;
+
+   //control knobs
+   rand int                        req_delay;
+   rand int                        rsp_delay;
+   static int                      min_rsp_delay;
+   static int                      min_req_delay;
+   static int                      max_rsp_delay;
+   static int                      max_req_delay;
+   static bit                      interleaving_en;
+   static bit                      out_of_order_en;
+   static bit [(2**ID_WIDTH)-1:0]  cmd_tag_queue_size;
+  
+    //CONSTRAINTS
+    constraint req_delay_c {req_delay inside {[min_req_delay:max_req_delay]};} 
+    constraint rsp_delay_c {rsp_delay inside {[min_rsp_delay:max_rsp_delay]};} 
+    
+
+
+endclass : axi_read_transaction
+
+
+module axi_slave_read (
+   //CLK & RST
+   input                           clk , 
+   input                           reset_n,
+   //READ COMMAND BUS
+   input [(ID_WIDTH  - 1) : 0]     arid,
+   input [(ADDR_WIDTH - 1) : 0]    araddr,
+   input [(LEN_WIDTH - 1) : 0]     arlen,
+   input [(2 - 1) : 0]             arburst,
+   input [(SIZE_WIDTH - 1) : 0]    arsize,
+   input                           arvalid,
+   output  logic                   arready,
+   //READ RESPONSE BUS
+   output logic [(ID_WIDTH - 1) : 0]   rid,
+   output logic [1:0]                  rresp,
+   output logic [(DATA_WIDTH - 1) : 0] rdata,
+   output logic [(DATA_WIDTH/8) - 1 : 0]  rstrobe,
+   output logic                           rlast,
+   output logic                           rvalid,
+   input                                  rready,
+   //Control signals
+   input [31:0]                           min_rsp_delay,
+   input [31:0]                           min_req_delay,
+   input [31:0]                           max_rsp_delay,
+   input [31:0]                           max_req_delay,
+   input [31:0]                           num_slave,
+   input                                  interleaving_en,
+   input                                  out_of_order_en
+);
+   
+   import  uvm_pkg :: *;
+  `include "uvm_macros.svh"
+   bit current_rsp_id_freeze;
+   int request_q[$];
+   axi_read_transaction                req , rsp;
+   axi_read_transaction                cmd_order_queue[$];
+   axi_read_transaction                addr_data_queue[$];
+   axi_read_transaction                tag_based_cmd_queue[2**ID_WIDTH][$];
+   bit [DATA_WIDTH - 1 :0]             data_queue[2**ID_WIDTH] [$];
+   bit                                 error_rsp_scenario;                                
+   int           offset;
+
+   initial begin
+      fork
+         read_request();
+         read_data ();
+      join
+   end
+
+  always @(min_rsp_delay , min_req_delay , max_rsp_delay , max_req_delay) begin
+     req.min_req_delay = min_req_delay;
+     req.max_req_delay = max_req_delay;
+     req.min_rsp_delay = min_rsp_delay;
+     req.max_rsp_delay = max_rsp_delay;
+  end
+
+
+
+   task read_request ();
+      arready  = 0;
+      forever begin
+         req = new();
+         @(posedge clk); 
+         arready  = 0;
+         wait (arvalid == 1) begin
+           #1 wait (arvalid == 1);
+            @(posedge clk);
+         end
+         assert (req.randomize()); 
+         repeat (req.req_delay) begin
+            @(posedge clk);
+         end
+         while (tag_based_cmd_queue[arid].size() > 0) begin
+            @(posedge clk); 
+         end
+         arready      = 1;
+         req.arid     = arid;
+         req.araddr   = araddr ;
+         req.arlen    = arlen ;
+         req.arburst  = arburst ;
+         req.arsize   = arsize ;
+
+         #1; 
+         if (arvalid == 1) begin
+            fork
+            automatic axi_read_transaction txn = req;
+               begin
+                  @(posedge clk);
+                  cmd_order_queue.push_back (txn);
+                 addr_data_queue.push_back(txn);
+                  tag_based_cmd_queue[txn.arid].push_back(txn);
+                  populate_data_queue (txn); 
+               end
+            join_none
+         end
+      end
+   endtask : read_request
+
+   task populate_data_queue (axi_read_transaction txn);
+      bit [1+(DATA_WIDTH/8)+DATA_WIDTH :0] data;
+      int incr_addr;
+      bit [(DATA_WIDTH/8) - 1:0] strobe;   
+
+      std :: randomize (error_rsp_scenario) with {error_rsp_scenario dist {0 := 99 , 1 := 10};};   
+      if (error_rsp_scenario == 1) begin
+          txn.arlen =  txn.arlen + 1;
+      end
+      for (int i = 0 ; i <= txn.arlen ; i ++) begin
+         assert (std :: randomize (data));
+         if (txn.arsize != 7) begin
+            strobe =  {(DATA_WIDTH/8){1'b1}} >> ((2**txn.arsize)-1); 
+            data [(DATA_WIDTH/8)+ (DATA_WIDTH -1): DATA_WIDTH]  = data [(DATA_WIDTH/8) + (DATA_WIDTH -1): DATA_WIDTH] & strobe;
+         end
+         if (txn.arburst == 1) begin
+            incr_addr = incr_addr + (2**(txn.arsize+1));
+         end 
+         std :: randomize (error_rsp_scenario) with {error_rsp_scenario dist {0 := 90 , 1 := 10};};   
+         if (txn.araddr[(32 - 1) : 12] > (num_slave-1)) begin
+            data[2+(DATA_WIDTH/8)+(DATA_WIDTH -1) : 1+(DATA_WIDTH/8)+(DATA_WIDTH -1)] = 2;
+         end else if ((incr_addr [31:12] != txn.araddr[(32 - 1) : 12]) && (txn.arburst == 1)) begin
+            data[2+(DATA_WIDTH/8)+(DATA_WIDTH -1) : 1+(DATA_WIDTH/8)+(DATA_WIDTH -1)] = 3;
+         end else begin
+            data[2+(DATA_WIDTH/8)+(DATA_WIDTH -1) : 1+(DATA_WIDTH/8)+(DATA_WIDTH -1)] = 0;
+         end
+         if (error_rsp_scenario == 1) begin
+            data[2+(DATA_WIDTH/8)+(DATA_WIDTH -1) : 1+(DATA_WIDTH/8)+(DATA_WIDTH -1)] = $random;
+         end
+         data_queue[txn.arid].push_back(data);
+      end
+         
+   endtask : populate_data_queue
+
+
+
+   task read_data;
+
+       rvalid     = 0;
+       rlast      = 0;
+      forever begin
+         choose_data_and_drive();
+      end
+   endtask : read_data
+
+
+
+   task  choose_data_and_drive ();
+     bit data_exist;
+     bit rlast_t;
+     bit [2+(DATA_WIDTH/8)+(DATA_WIDTH -1):0] data_to_send;
+     logic [(ID_WIDTH - 1) : 0]      current_rsp_id;
+     //$display("RD:Wait for rvalid:4 : %d : %t",araddr,$time);
+     
+     axi_read_transaction   packet;
+    
+   //  $display("RD:Wait for rvalid:6 : %h", data_fifo[araddr]);
+     @(posedge clk);
+     //$display("RD:Wait for rvalid:7 : %h", data_fifo[araddr]);
+     while (cmd_order_queue.size == 0) begin
+        @(posedge clk);
+     end
+     rsp = new();
+     packet = new();
+     assert (rsp.randomize());
+     request_q.delete(); 
+     foreach  (cmd_order_queue[i]) begin 
+        request_q.push_back (cmd_order_queue[i].arid);
+     end
+     `uvm_info ("slave_read" , $psprintf ("CHOOSE READ_DATA : request_q = %p",request_q) , UVM_DEBUG)
+     if ((interleaving_en == 0) && (current_rsp_id_freeze == 0)) begin
+        current_rsp_id_freeze = 1; 
+        if (out_of_order_en == 1) begin
+           request_q.shuffle();
+           current_rsp_id = request_q.pop_front ();
+        end else begin
+           current_rsp_id = request_q.pop_front ();
+        end
+     end else if (interleaving_en == 1) begin
+        request_q.shuffle();
+        current_rsp_id = request_q.pop_front ();
+     end
+  // else begin
+  //     current_rsp_id = request_q.pop_front ();
+  //  end 
+     `uvm_info ("slave_read" , $psprintf ("CHOOSE READ_DATA : current_rsp_id  = %h", current_rsp_id ) , UVM_DEBUG)
+     `uvm_info ("slave_read" , $psprintf ("CHOOSE READ_DATA : Data_q  = %p", data_queue ) , UVM_DEBUG)
+     `uvm_info ("slave_read" , $psprintf ("CHOOSE READ_DATA : cmd_order_queue   = %p", cmd_order_queue ) , UVM_DEBUG)
+     `uvm_info ("slave_read" , $psprintf ("CHOOSE READ_DATA : tag_based_cmd_queue    = %p", tag_based_cmd_queue) , UVM_DEBUG)
+     
+     data_to_send = data_queue[current_rsp_id].pop_front ();
+     rlast_t = 0;
+     if (data_queue[current_rsp_id].size() == 0) begin
+        if ((interleaving_en == 0) && (current_rsp_id_freeze == 1)) begin
+            current_rsp_id_freeze = 0;
+        end 
+        rlast_t = 1;
+        foreach (cmd_order_queue[i]) begin
+           if (cmd_order_queue[i].arid == current_rsp_id) begin
+              cmd_order_queue.delete(i);
+           end
+        end
+        void'(tag_based_cmd_queue[current_rsp_id].pop_front()); 
+     end
+     repeat (rsp.rsp_delay) begin
+        @(posedge clk);
+     end
+     rvalid     = 1;
+     
+     
+     rid        = current_rsp_id;
+     rdata      = data_to_send [DATA_WIDTH - 1 :0];
+     rstrobe    = data_to_send [(DATA_WIDTH/8)+(DATA_WIDTH - 1):DATA_WIDTH];
+     rresp      = data_to_send [1+(DATA_WIDTH/8)+DATA_WIDTH:(DATA_WIDTH/8)+DATA_WIDTH];
+  
+      //  offset=0;
+        // repeat(arlen)
+          // begin
+            // @(posedge clk);
+            // rdata=data_fifo[araddr[1]+offset];
+             //offset=offset+1;
+      
+           //end
+     
+     
+     
+     
+     
+      packet = addr_data_queue.pop_front ();
+        //   $display("packet %p",packet);
+     
+               if(packet != null) begin
+             
+            // data_fifo[packet.araddr]= rdata;
+             
+          //   $display("packet_araddr : %d : data %h : time %t",packet.araddr,rdata,$time);
+
+            // $display("Wait for rvalid:4 : %h", data_fifo[packet.araddr]);
+           
+           
+    
+    if(data_fifo.exists(packet.araddr)) 
+       begin
+        // rdata = data_fifo[packet.araddr];
+         
+       
+         
+         //$display("read address: %d read data: %h : %t",packet.araddr,rdata,$time);
+           //       $display("packet_araddr : %d : data %h : time %t",packet.araddr,rdata,$time);
+
+       end
+           
+     
+     else begin
+       //$display("No data found in this adress");
+                rdata = 'hABCD_ABCD_ABCD_ABCD;
+     end
+  
+           end   
+             
+          // end
+     else
+       begin
+                         rdata = 'hABCD_0000_ABCD_0000;
+       end
+           
+           
+             
+             rlast      = rlast_t;
+           
+     while (rready == 0) begin
+        @(posedge clk);
+     end
+     @(posedge clk);
+     rvalid     = 0;
+     rlast      = 0;
+    //wait (rready == 1);
+    //#1;
+    //wait (rready == 1);
+//
+  //   data_exist = 0;
+  //   foreach (data_queue[i]) begin
+   //     if (data_queue[i].size() != 0) begin
+    //       data_exist = 1;
+     //      break;
+      //  end
+    // end
+    // if (data_exist == 0) begin 
+     //   fork begin
+      //     @(posedge clk);
+       //    rvalid     = 0;
+       //    rlast      = 0;
+       // end 
+       // join_none
+     //end
+      
+   endtask : choose_data_and_drive
+
+
+endmodule : axi_slave_read 
+
+*/
+
+
+
+
+

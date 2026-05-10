@@ -1,0 +1,269 @@
+
+
+
+class r_driver extends uvm_driver #(r_seq_item , r_seq_item);
+
+  `uvm_component_utils (r_driver)
+   virtual axi_intf.R_DRV_MOD r_drv_if;
+
+   r_seq_item   command_queue[$];
+   r_seq_item   command_r_clone,command_r_txn;
+   semaphore    s1 = new(1);
+   semaphore    s2 = new(1);
+
+   function new (string name = "r_driver" , uvm_component parent);
+      super.new (name,parent);
+   endfunction
+
+   extern function void build_phase  (uvm_phase phase); 
+   extern task run_phase             (uvm_phase phase);
+   extern task r_command_task ();           
+   extern task r_data_task ();             
+
+endclass : r_driver
+
+   function void r_driver :: build_phase (uvm_phase phase);
+      super.build_phase (phase);
+     `uvm_info ("r_driver" , "build_phase" , UVM_MEDIUM) 
+      command_r_txn = r_seq_item :: type_id :: create("command_r_txn");
+   endfunction : build_phase
+
+     
+   task r_driver :: run_phase (uvm_phase phase);
+     `uvm_info ("r_driver" , "run_phase" , UVM_MEDIUM)
+      forever 
+      begin
+        wait (r_drv_if.reset_n == 1'b1);
+        //$display("R_DRIVER: Reset De-assertion time %t",$time);
+        @(r_drv_if.r_drv_cb);       
+        //$display("R_DRIVER: After CB time %t",$time);
+        fork
+         r_command_task ();
+         r_data_task ();
+        //join_none
+          
+        join_any
+       // join
+          @(r_drv_if.r_drv_cb);
+      end
+   endtask : run_phase
+
+
+   task r_driver :: r_command_task ();
+     //forever
+      // begin
+         //$display("R_COMMAND_TASK: time %t",$time);
+      seq_item_port.get_next_item (req);
+      $cast(command_r_clone , req.clone());
+      seq_item_port.item_done(rsp);
+      command_queue.push_back (command_r_clone);
+         //$display("DRV :CMD : addr %d : len %d : time %t",command_r_clone.araddr,command_r_clone.arlen,$time);
+         @(r_drv_if.r_drv_cb);
+         //$display("DRV: CMD : After 54: time %t",$time);
+      s1.get(1);     
+         //$display("DRV :CMD : addr %d : len %d : time %t",command_r_clone.araddr,command_r_clone.arlen,$time);
+      r_drv_if.r_drv_cb.arvalid  <= 1'b1;
+      r_drv_if.r_drv_cb.arid     <= command_r_clone.arid; 
+      r_drv_if.r_drv_cb.araddr   <= command_r_clone.araddr;
+      r_drv_if.r_drv_cb.arlen    <= command_r_clone.arlen;
+      r_drv_if.r_drv_cb.arsize   <= command_r_clone.arsize;
+      r_drv_if.r_drv_cb.arburst  <= command_r_clone.arburst;
+         //$display("waiting for arready to 1 : time %t",$time);
+      wait (r_drv_if.r_drv_cb.arready == 1'b1);
+         //$display("after arready : time %t",$time);
+
+     r_drv_if.r_drv_cb.arvalid  <= 1'b0;
+     repeat(8)
+        begin
+        //$display("DRV: CMD : before 68: time %t",$time);
+        @(r_drv_if.r_drv_cb);
+         //$display("DRV: CMD : After 68: time %t",$time);
+        end 
+         s1.put(1);
+             //  seq_item_port.item_done(rsp);
+       //end
+   endtask : r_command_task
+         
+   task r_driver :: r_data_task;
+     s2.get(1);
+      r_drv_if.r_drv_cb.rready  <= 1'b1; 
+     wait (r_drv_if.r_drv_cb.rvalid == 1'b1);   
+          // r_drv_if.r_drv_cb.rready  <= 1'b1; 
+     command_r_txn=new();
+     command_r_txn = command_queue.pop_front();
+   //$display("pop addr %d : len %d : time %t",command_r_txn.araddr,command_r_txn.arlen,$time);
+     //$display("DRV : DATA : size %d : len %d :rddata %h :time %t",command_queue.size(),command_r_txn.arlen,r_drv_if.r_drv_cb.rdata,$time);
+         wait(command_r_txn.arlen)
+     begin
+       //$display("rddata %h :len %d : time %t",r_drv_if.r_drv_cb.rdata,command_r_txn.arlen,$time);
+     wait (r_drv_if.r_drv_cb.rvalid == 1'b0);
+      r_drv_if.r_drv_cb.rready  <= 1'b0; 
+     //$display("DRV : DATA : Before drv cb  :time %t",$time);
+     #1;
+     //$display("DRV : DATA : After drv cb  :time %t",$time);
+     end
+      s2.put(1);
+   endtask : r_data_task
+
+
+
+/*
+
+class r_driver extends uvm_driver #(r_seq_item , r_seq_item);
+
+  `uvm_component_utils (r_driver)
+   virtual axi_intf.R_DRV_MOD r_drv_if;
+
+   r_seq_item   command_queue[$];
+   r_seq_item   command_r_clone,command_r_txn;
+   semaphore    s1 = new(1);
+   semaphore    s2 = new(1);
+
+   function new (string name = "r_driver" , uvm_component parent);
+      super.new (name,parent);
+   endfunction
+
+   extern function void build_phase  (uvm_phase phase); 
+   extern task run_phase             (uvm_phase phase);
+   extern task r_command_task ();           
+   extern task r_data_task ();             
+
+endclass : r_driver
+
+   function void r_driver :: build_phase (uvm_phase phase);
+      super.build_phase (phase);
+     `uvm_info ("r_driver" , "build_phase" , UVM_MEDIUM) 
+      command_r_txn = r_seq_item :: type_id :: create("command_r_txn");
+   endfunction : build_phase
+
+   task r_driver :: run_phase (uvm_phase phase);
+     `uvm_info ("r_driver" , "run_phase" , UVM_MEDIUM)
+      forever begin
+         wait (r_drv_if.reset_n == 1'b1);
+         fork
+            r_data_task ();
+            r_command_task ();
+         join_none
+         @(r_drv_if.r_drv_cb);
+      end
+   endtask : run_phase
+
+
+   task r_driver :: r_command_task ();
+      seq_item_port.get_next_item (req);
+      $cast(command_r_clone , req.clone());
+      seq_item_port.item_done(rsp);
+      command_queue.push_back (command_r_clone);
+      s1.get(1);
+      command_r_txn = command_queue.pop_front();
+      r_drv_if.r_drv_cb.arvalid  <= 1'b1;
+      r_drv_if.r_drv_cb.arid     <= command_r_txn.arid; 
+      r_drv_if.r_drv_cb.araddr   <= command_r_txn.araddr;
+      r_drv_if.r_drv_cb.arlen    <= command_r_txn.arlen;
+      r_drv_if.r_drv_cb.arsize   <= command_r_txn.arsize;
+      r_drv_if.r_drv_cb.arburst  <= command_r_txn.arburst;
+      wait (r_drv_if.r_drv_cb.arready == 1'b1);
+      r_drv_if.r_drv_cb.arvalid  <= 1'b0;
+      repeat(req.cmd2cmd_delay)
+        $display("1 before cb %t",$time);
+        @(r_drv_if.r_drv_cb);
+     $display(" 1 after cb %t",$time);
+      s1.put(1);
+   endtask : r_command_task
+
+   task r_driver :: r_data_task;
+      s2.get(1);
+      wait(r_drv_if.r_drv_cb.rdata)
+      r_drv_if.r_drv_cb.rready  <= 1'b1; 
+     wait (r_drv_if.r_drv_cb.rvalid == 1'b1);
+     $display("2 before cb %t",$time);
+       @(r_drv_if.r_drv_cb);
+     $display("2 after cb %t",$time);
+
+     wait (r_drv_if.r_drv_cb.rvalid == 1'b0);
+
+     r_drv_if.r_drv_cb.rready  <= 1'b0; 
+
+            @(r_drv_if.r_drv_cb);
+@(r_drv_if.r_drv_cb);
+      s2.put(1);
+   endtask : r_data_task
+
+
+*/
+
+
+
+
+/*
+class r_driver extends uvm_driver #(r_seq_item , r_seq_item);
+
+  `uvm_component_utils (r_driver)
+   virtual axi_intf.R_DRV_MOD r_drv_if;
+
+   r_seq_item   command_queue[$];
+   r_seq_item   command_r_clone,command_r_txn;
+   semaphore    s1 = new(1);
+   semaphore    s2 = new(1);
+
+   function new (string name = "r_driver" , uvm_component parent);
+      super.new (name,parent);
+   endfunction
+
+   extern function void build_phase  (uvm_phase phase); 
+   extern task run_phase             (uvm_phase phase);
+   extern task r_command_task ();           
+   extern task r_data_task ();             
+
+endclass : r_driver
+
+   function void r_driver :: build_phase (uvm_phase phase);
+      super.build_phase (phase);
+     `uvm_info ("r_driver" , "build_phase" , UVM_MEDIUM) 
+      command_r_txn = r_seq_item :: type_id :: create("command_r_txn");
+   endfunction : build_phase
+
+   task r_driver :: run_phase (uvm_phase phase);
+     `uvm_info ("r_driver" , "run_phase" , UVM_MEDIUM)
+      forever begin
+         wait (r_drv_if.reset_n == 1'b1);
+         fork
+            r_data_task ();
+            r_command_task ();
+         join_none
+         @(r_drv_if.r_drv_cb);
+      end
+   endtask : run_phase
+
+
+   task r_driver :: r_command_task ();
+      seq_item_port.get_next_item (req);
+      $cast(command_r_clone , req.clone());
+      seq_item_port.item_done(rsp);
+      command_queue.push_back (command_r_clone);
+      s1.get(1);
+      command_r_txn = command_queue.pop_front();
+      r_drv_if.r_drv_cb.arvalid  <= 1'b1;
+      r_drv_if.r_drv_cb.arid     <= command_r_txn.arid; 
+         wait (r_drv_if.reset_n == 1'b1);
+
+     @(r_drv_if.r_drv_cb);
+      r_drv_if.r_drv_cb.araddr   <= command_r_txn.araddr;
+      r_drv_if.r_drv_cb.arlen    <= command_r_txn.arlen;
+      r_drv_if.r_drv_cb.arsize   <= command_r_txn.arsize;
+      r_drv_if.r_drv_cb.arburst  <= command_r_txn.arburst;
+      wait (r_drv_if.r_drv_cb.arready == 1'b1);
+      r_drv_if.r_drv_cb.arvalid  <= 1'b0;
+      repeat(req.cmd2cmd_delay) @(r_drv_if.r_drv_cb);
+      s1.put(1);
+   endtask : r_command_task
+
+   task r_driver :: r_data_task;
+      s2.get(1);
+      r_drv_if.r_drv_cb.rready  <= 1'b1; 
+      wait (r_drv_if.r_drv_cb.rvalid == 1'b1);
+      r_drv_if.r_drv_cb.rready  <= 1'b0; 
+      @(r_drv_if.r_drv_cb);
+      s2.put(1);
+   endtask : r_data_task
+*/
